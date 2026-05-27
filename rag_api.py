@@ -171,11 +171,12 @@ Format with clear labels and values. Show ranges for benchmarks. Include all dea
             
             with urllib.request.urlopen(req, timeout=30) as response:
                 result = json.loads(response.read().decode('utf-8'))
-                answer = result.get('choices', [{}])[0].get('message', {}).get('content', 'No response from LLM')
+                raw = result.get('choices', [{}])[0].get('message', {}).get('content', 'No response from LLM')
+                answer = cleanup_response(raw)
         else:
-            answer = f"Based on the documents: {context[:300]}..."
+            answer = cleanup_response(f"Based on documents: {context[:300]}...")
     except Exception as e:
-        answer = f"Error generating answer: {str(e)}"
+        answer = cleanup_response(f"Error: {str(e)}")
     
     # Filter citations to only those actually referenced in answer
     answer_lower = answer.lower()
