@@ -159,6 +159,44 @@ def documents():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/upload', methods=['POST'])
+def upload_files():
+    """
+    Temporary endpoint to upload vector_store.json and local_metadata.json.
+    Requires API key authentication.
+    """
+    if not validate_api_key():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    try:
+        import json
+        import shutil
+        files_uploaded = []
+
+        if 'vector_store' in request.files:
+            file = request.files['vector_store']
+            if file:
+                data = json.load(file)
+                with open('vector_store.json', 'w') as f:
+                    json.dump(data, f)
+                vector_store.load()
+                files_uploaded.append('vector_store.json')
+
+        if 'metadata' in request.files:
+            file = request.files['metadata']
+            if file:
+                shutil.copyfileobj(file, open('local_metadata.json', 'wb'))
+                files_uploaded.append('local_metadata.json')
+
+        return jsonify({
+            'status': 'success',
+            'files_uploaded': files_uploaded,
+            'message': f'Uploaded {len(files_uploaded)} file(s)'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     port = int(os.getenv('FLASK_PORT', 5001))
     app.run(debug=True, port=port)
