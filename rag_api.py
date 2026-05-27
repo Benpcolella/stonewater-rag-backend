@@ -126,28 +126,51 @@ vector_store = SimpleVectorStore()
 # ============================================================================
 
 def cleanup_response(text):
-    """Strip formatting junk, preserve deal metrics."""
-    text = text.replace('**', '').replace('*', '').replace('__', '')
-    text = re.sub(r'\|[-\s]+\|', '|', text)
-    text = re.sub(r'-{3,}', '', text)
+    """Clean formatting while preserving structure & metrics."""
+    # Remove markdown emphasis but preserve headers
+    text = text.replace('**', '').replace('__', '')
+    text = re.sub(r'(?<!\*)\*(?!\*)', '', text)  # Single asterisks only
+
+    # Remove malformed table separators but preserve normal pipes
+    text = re.sub(r'\|[\s\-=:]+\|', '', text)  # Remove |---|---|
+    text = re.sub(r'-{4,}', '', text)  # Remove excessive dashes (but preserve em-dashes)
+
+    # Remove boilerplate
+    text = re.sub(r'Based on.*?documents?\.?', '', text, flags=re.I)
+    text = re.sub(r'Source.*?:', '', text, flags=re.I)
+
+    # Remove contact info
     text = re.sub(r'[a-z0-9._%+-]+@[a-z0-9.-]+', '', text, flags=re.I)
     text = re.sub(r'\d{3}[-.]?\d{3}[-.]?\d{4}', '', text)
-    text = re.sub(r'Based on.*?documents', '', text, flags=re.I)
-    text = re.sub(r'Source.*?:', '', text, flags=re.I)
-    text = re.sub(r'[*]{1,2}[A-Z][a-zA-Z ]*[*]{0,2}:', '', text)
-    text = re.sub(r'###\s+', '', text)
-    text = re.sub(r'##\s+', '', text)
+
+    # Clean up headers - convert ### to proper headers but keep content
+    text = re.sub(r'^#+\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*\[', '[', text, flags=re.MULTILINE)
+
+    # Preserve structure: keep lines with substance
     clean_lines = []
-    for l in text.split('\n'):
-        l = l.strip()
-        if l and len(l) > 3:
-            if not all(c in '|-_=*' for c in l):
-                clean_lines.append(l)
+    for line in text.split('\n'):
+        line = line.strip()
+        if line and len(line) > 3:
+            # Keep: headers, data, metrics, labels
+            # Skip: pure formatting lines (all dashes, pipes, equals)
+            if not all(c in '|-_=*' for c in line):
+                # Preserve line breaks for formatting
+                clean_lines.append(line)
+
     text = '\n'.join(clean_lines)
-    text = re.sub(r'  +', ' ', text)
+
+    # Reduce multiple spaces but preserve intentional formatting
+    text = re.sub(r'(?<!\n)  +', ' ', text)  # Only reduce spaces within lines
+
     text = text.strip()
-    if len(text) > 1200:
-        text = text[:1200].rsplit(' ', 1)[0] + '...'
+
+    # Preserve up to 2000 chars for analytical responses
+    if len(text) > 2000:
+        text = text[:2000].rsplit('\n', 1)[0]  # Break on line boundary, not word
+        if not text.endswith('...'):
+            text += '...'
+
     return text
 
 def generate_answer(question, search_results):
@@ -168,29 +191,79 @@ def generate_answer(question, search_results):
             if not api_key:
                 return {'answer': 'LLM API key not configured', 'citations': [], 'error': 'Missing DEEPSEEK_API_KEY'}
             
-            # Enhanced system prompt with CRE knowledge
-            system_prompt = f"""You are an expert in Commercial Real Estate (CRE) analysis and deal metrics.
+            # Enhanced system prompt with CRE knowledge & critical thinking
+            system_prompt = f"""You are an expert in Commercial Real Estate (CRE) analysis with strong critical thinking.
 
 {CRE_CONTEXT}
 
-INSTRUCTIONS:
-1. Answer ONLY what is asked - no extra information
-2. Use the CRE knowledge above to understand metrics and terminology
-3. For rate queries: List specific SOFR + spread and all-in rates from deals
-4. For financing: Include loan amount, LTC%, term, amortization
-5. For metrics: Include $/unit, $/SF, unit count, density, costs
-6. For market analysis: Compare multiple deals/markets, show ranges
-7. Format as concise numbered or bulleted list, not prose
-8. Cite deal names and source documents
-9. Preserve all financial numbers and percentages - do NOT round excessively
-10. If data not found, say "Not found in documents" - don't fabricate"""
+CORE INSTRUCTIONS:
+1. ANALYZE, don't just list. Synthesize patterns, trends, ranges, and insights
+2. Use CONTEXT-AWARE aggregation:
+   - Market-specific questions: Group by market, show ranges, identify outliers
+   - Financing questions: Show ranges (min-max), identify market trends, highlight key patterns
+   - Multi-deal comparisons: Identify patterns, show best/worst/median, synthesize insights
+   - Deal questions: Provide comprehensive context, not isolated data points
+
+3. FORMATTING RULES:
+   - Use clear section headers (## Topic or [SECTION])
+   - Separate each deal/market with line breaks
+   - Use consistent format: Deal Name | Key Metric1 | Key Metric2
+   - Group related information together
+   - NO dense paragraphs - break into digestible chunks
+
+4. CRITICAL THINKING:
+   - Don't just list deals; explain what the data shows
+   - Identify ranges: "Rates range from X% to Y%, with most deals at Z%"
+   - Highlight outliers: "Most loans are 44% LTC, but Altamonte is 50%"
+   - Show relationships: "Higher rates correlate with lower LTC" or "No correlation found"
+   - Answer the "so what" question - what does this mean for the market/strategy?
+
+5. SPECIFIC QUERY TYPES:
+
+   INTEREST RATES:
+   - Show range: "Rates from X% to Y%"
+   - By SOFR component: "SOFR spreads range from +250 to +350 basis points"
+   - Identify clusters: "Most deals SOFR+275-300 (all-in 6.85-7.10%)"
+
+   FINANCING TRENDS:
+   - LTC range: "From X% to Y%, average Z%"
+   - Loan sizes: Show range and typical amounts
+   - Terms: Identify standard vs non-standard
+
+   MARKET ANALYSIS:
+   - Group by market explicitly
+   - For each market: occupancy %, rents $/SF, cap rates, absorption
+   - Compare markets: "Market A shows higher rents but lower occupancy"
+
+   MULTI-DEAL QUERIES:
+   - Organize by category (residential, retail, office)
+   - Show metrics grid: Deal | Units | $/Unit | LTC | Rate
+   - Synthesize: "Portfolio ranges from $X to $Y deals"
+
+6. DATA PRESERVATION:
+   - Keep all numbers (no rounding)
+   - Preserve %, $M, $/unit, $/SF, bps units
+   - Always include sources
+
+7. TONE:
+   - Professional, analytical, concise
+   - Show confidence in patterns; admit uncertainty if data sparse
+   - No fluff, no "based on the documents" boilerplate"""
 
             user_msg = f"""Question: {question}
 
 Documents:
 {context}
 
-Answer directly with specific metrics, deal names, rates, and costs. Use bullet points. Show all relevant deals found."""
+ANALYSIS TASK:
+- Extract ALL relevant deals/markets from documents
+- Identify query intent: rates? financing? market analysis? comparisons?
+- Apply CONTEXT-AWARE logic (see instructions above)
+- SYNTHESIZE insights, don't just list data
+- Use clear formatting with headers and line breaks
+- Provide analytical context: what do these numbers tell us?
+
+Answer with critical analysis, not raw data listing."""
             
             payload = {
                 "model": "deepseek-chat",
@@ -198,8 +271,8 @@ Answer directly with specific metrics, deal names, rates, and costs. Use bullet 
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_msg}
                 ],
-                "temperature": 0.3,
-                "max_tokens": 1200
+                "temperature": 0.35,
+                "max_tokens": 1500
             }
             
             req = urllib.request.Request(
