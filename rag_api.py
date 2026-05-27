@@ -85,7 +85,9 @@ class VectorStore:
         by_type = defaultdict(int)
         for chunk in self.chunks:
             meta = chunk.get('metadata', {})
-            unique_docs.add(meta.get('file_path'))
+            file_path = meta.get('file_path')
+            if file_path:
+                unique_docs.add(file_path)
             doc_type = meta.get('doc_type', 'Unknown')
             by_type[doc_type] += 1
         return {
