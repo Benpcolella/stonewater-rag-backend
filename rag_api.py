@@ -162,7 +162,8 @@ def documents():
 @app.route('/api/upload', methods=['POST'])
 def upload_files():
     """
-    Temporary endpoint to upload vector_store.json and local_metadata.json.
+    Upload vector_store.json and local_metadata.json.
+    Supports both multipart form data and base64-encoded JSON data.
     Requires API key authentication.
     """
     if not validate_api_key():
@@ -171,8 +172,10 @@ def upload_files():
     try:
         import json
         import shutil
+        import base64
         files_uploaded = []
 
+        # Try multipart form data first
         if 'vector_store' in request.files:
             file = request.files['vector_store']
             if file:
@@ -188,13 +191,30 @@ def upload_files():
                 shutil.copyfileobj(file, open('local_metadata.json', 'wb'))
                 files_uploaded.append('local_metadata.json')
 
+        # Try JSON body with base64-encoded data
+        if not files_uploaded:
+            data = request.get_json()
+            if data:
+                if 'vector_store_b64' in data:
+                    content = base64.b64decode(data['vector_store_b64'])
+                    with open('vector_store.json', 'wb') as f:
+                        f.write(content)
+                    vector_store.load()
+                    files_uploaded.append('vector_store.json')
+
+                if 'metadata_b64' in data:
+                    content = base64.b64decode(data['metadata_b64'])
+                    with open('local_metadata.json', 'wb') as f:
+                        f.write(content)
+                    files_uploaded.append('local_metadata.json')
+
         return jsonify({
             'status': 'success',
             'files_uploaded': files_uploaded,
             'message': f'Uploaded {len(files_uploaded)} file(s)'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 
 if __name__ == '__main__':
