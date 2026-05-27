@@ -14,20 +14,15 @@ def initialize_vector_store_files():
         return  # Files already exist and have content
 
     try:
-        # Import the vector store init data
-        from vector_store_init import vector_store_b64, metadata_b64
+        from embedded_data import EMBEDDED_VECTOR_STORE_B64
 
         # Write vector store
         with open('vector_store.json', 'wb') as f:
-            f.write(base64.b64decode(vector_store_b64))
-
-        # Write metadata
-        with open('local_metadata.json', 'wb') as f:
-            f.write(base64.b64decode(metadata_b64))
+            f.write(base64.b64decode(EMBEDDED_VECTOR_STORE_B64))
 
         print("✓ Vector store initialized from embedded data")
     except Exception as e:
-        print(f"⚠ Could not initialize from vector_store_init: {e}")
+        print(f"⚠ Could not initialize vector store: {e}")
 
 # Initialize before creating VectorStore instance
 initialize_vector_store_files()
