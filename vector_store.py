@@ -25,6 +25,27 @@ class VectorStore:
             except Exception as e:
                 print(f"Error loading vector store: {e}")
                 self.chunks = []
+        else:
+            # Try loading from embedded data as fallback
+            self._load_from_embedded_data()
+
+    def _load_from_embedded_data(self):
+        """Load vector store from embedded base64 data if file doesn't exist."""
+        try:
+            from embedded_data import EMBEDDED_VECTOR_STORE_B64
+            import base64
+
+            data_bytes = base64.b64decode(EMBEDDED_VECTOR_STORE_B64)
+            data = json.loads(data_bytes.decode('utf-8'))
+            self.chunks = data.get('chunks', [])
+            self.vocab = {k: int(v) for k, v in data.get('vocab', {}).items()}
+            self.idf = data.get('idf', {})
+            if self.chunks:
+                self._rebuild_idf()
+            print(f"✓ Loaded {len(self.chunks)} chunks from embedded data")
+        except Exception as e:
+            print(f"⚠ Could not load from embedded data: {e}")
+            self.chunks = []
 
     def save(self):
         with open(self.store_file, 'w') as f:

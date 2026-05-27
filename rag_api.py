@@ -1,31 +1,9 @@
 import os
-import base64
-import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# Initialize vector store files from embedded data before importing VectorStore
-def initialize_vector_store_files():
-    """Extract embedded vector store data and write to disk if files don't exist."""
-    if os.path.exists('vector_store.json') and os.path.getsize('vector_store.json') > 100:
-        return  # Files already exist and have content
-
-    try:
-        from embedded_data import EMBEDDED_VECTOR_STORE_B64
-
-        # Write vector store
-        with open('vector_store.json', 'wb') as f:
-            f.write(base64.b64decode(EMBEDDED_VECTOR_STORE_B64))
-
-        print("✓ Vector store initialized from embedded data")
-    except Exception as e:
-        print(f"⚠ Could not initialize vector store: {e}")
-
-# Initialize before creating VectorStore instance
-initialize_vector_store_files()
 
 from document_sync import DocumentSync
 from pdf_processor import PDFProcessor
