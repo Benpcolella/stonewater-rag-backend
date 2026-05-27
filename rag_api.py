@@ -37,7 +37,12 @@ def validate_api_key():
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint."""
-    return jsonify({'status': 'ok', 'message': 'Stonewater RAG API is running'})
+    stats = vector_store.get_stats()
+    return jsonify({
+        'status': 'ok',
+        'message': 'Stonewater RAG API is running',
+        'vector_store_chunks': stats.get('total_chunks', 0)
+    })
 
 
 @app.route('/api/sync', methods=['POST'])
