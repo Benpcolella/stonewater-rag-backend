@@ -100,6 +100,33 @@ class VectorStore:
 # Initialize
 vector_store = VectorStore()
 
+def cleanup_response(text):
+    """Clean up LLM response: remove formatting, sensitive info, boilerplate."""
+    import re
+    
+    # Remove markdown asterisks and formatting
+    text = text.replace('**', '').replace('__', '')
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)
+    
+    # Remove email addresses and phone numbers
+    text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[email]', text)
+    text = re.sub(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', '[phone]', text)
+    
+    # Remove "Based solely on the provided documents" and similar boilerplate
+    text = re.sub(r'Based solely on.*?documents[,.]?\s*', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'Based on.*?documents[,.]?\s*', '', text, flags=re.IGNORECASE)
+    
+    # Remove excessive "**Key Details:**" style headers
+    text = re.sub(r'\*\*[A-Za-z ]+:\*\*', '', text)
+    text = re.sub(r'^[A-Z][A-Za-z ]*:\s*', '', text, flags=re.MULTILINE)
+    
+    # Collapse multiple spaces/newlines
+    text = re.sub(r'\n\n+', '\n\n', text)
+    text = re.sub(r'  +', ' ', text)
+    
+    return text.strip()
+
 def generate_answer(question, search_results):
     if not search_results:
         return {
