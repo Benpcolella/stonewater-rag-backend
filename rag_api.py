@@ -143,6 +143,8 @@ def generate_answer(question, search_results):
     except Exception as e:
         answer = f"Error generating answer: {str(e)}"
     
+    # Filter citations to only those actually referenced in answer
+    answer_lower = answer.lower()
     citations = []
     seen = set()
     for result in search_results:
