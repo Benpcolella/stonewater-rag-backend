@@ -119,7 +119,7 @@ def generate_answer(question, search_results):
             if not api_key:
                 return {'answer': 'LLM API key not configured', 'citations': [], 'error': 'Missing DEEPSEEK_API_KEY'}
             
-            user_msg = f"Question: {question}\n\nBased on these documents, provide a comprehensive, specific answer. Include numbers, dates, and deal details. Exclude irrelevant boilerplate.\n\nDocuments:\n{context}"
+            user_msg = f"Answer this directly: {question}\n\nDocuments: {context}\n\nAnswer (no asterisks, no formatting, no team names):"
             payload = {
                 "model": "deepseek-chat",
                 "messages": [
