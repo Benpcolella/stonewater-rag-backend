@@ -101,30 +101,28 @@ class VectorStore:
 vector_store = VectorStore()
 
 def cleanup_response(text):
-    """Clean up LLM response: remove formatting, sensitive info, boilerplate."""
+    """Remove all junk from LLM response."""
+    # Remove asterisks
+    text = text.replace('**', '').replace('*', '')
+    # Remove emails
     import re
-    
-    # Remove markdown asterisks and formatting
-    text = text.replace('**', '').replace('__', '')
-    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
-    text = re.sub(r'\*([^*]+)\*', r'\1', text)
-    
-    # Remove email addresses and phone numbers
-    text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[email]', text)
-    text = re.sub(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', '[phone]', text)
-    
-    # Remove "Based solely on the provided documents" and similar boilerplate
-    text = re.sub(r'Based solely on.*?documents[,.]?\s*', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'Based on.*?documents[,.]?\s*', '', text, flags=re.IGNORECASE)
-    
-    # Remove excessive "**Key Details:**" style headers
-    text = re.sub(r'\*\*[A-Za-z ]+:\*\*', '', text)
-    text = re.sub(r'^[A-Z][A-Za-z ]*:\s*', '', text, flags=re.MULTILINE)
-    
-    # Collapse multiple spaces/newlines
-    text = re.sub(r'\n\n+', '\n\n', text)
+    text = re.sub(r'[a-z0-9._%+-]+@[a-z0-9.-]+', '', text, flags=re.I)
+    # Remove phone numbers
+    text = re.sub(r'\d{3}[-.]?\d{3}[-.]?\d{4}', '', text)
+    # Remove boilerplate
+    text = re.sub(r'Based (solely )?on.*?documents', '', text, flags=re.I)
+    # Remove section headers
+    text = re.sub(r'\*{1,2}[A-Z][a-zA-Z ]*:\*{0,2}', '', text)
+    # Collapse spaces
     text = re.sub(r'  +', ' ', text)
-    
+    text = re.sub(r'\n+', ' ', text)
+    # Limit length
+    text = text.strip()
+    if len(text) > 1200:
+        text = text[:1200]
+        idx = text.rfind('.')
+        if idx > 300:
+            text = text[:idx+1]
     return text.strip()
 
 def generate_answer(question, search_results):
