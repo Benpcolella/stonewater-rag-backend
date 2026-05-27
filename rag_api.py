@@ -67,7 +67,7 @@ class VectorStore:
             return 0.0
         return dot / (mag1 * mag2)
     
-    def search(self, query, top_k=5):
+    def search(self, query, top_k=10):
         if not self.chunks:
             return []
         query_vec = self._get_tfidf_vector(query)
@@ -108,7 +108,7 @@ def generate_answer(question, search_results):
             'error': 'No matching documents found'
         }
     
-    context = '\n\n'.join([r.get('text', '') for r in search_results[:5]])
+    context = "\n---\n".join([r.get("text", "")[:800] for r in search_results[:10]])
     
     llm_provider = os.getenv('LLM_PROVIDER', 'deepseek')
     try:
@@ -119,15 +119,15 @@ def generate_answer(question, search_results):
             if not api_key:
                 return {'answer': 'LLM API key not configured', 'citations': [], 'error': 'Missing DEEPSEEK_API_KEY'}
             
-            user_msg = f"Based on these documents:\n\n{context}\n\nAnswer this question: {question}"
+            user_msg = f"Question: {question}\n\nBased on these documents, provide a comprehensive, specific answer. Include numbers, dates, and deal details. Exclude irrelevant boilerplate.\n\nDocuments:\n{context}"
             payload = {
                 "model": "deepseek-chat",
                 "messages": [
                     {"role": "system", "content": "You are a helpful assistant for document-based Q&A. Answer questions based on provided documents. Be concise and cite sources."},
                     {"role": "user", "content": user_msg}
                 ],
-                "temperature": 0.7,
-                "max_tokens": 500
+                "temperature": 0.5,
+                "max_tokens": 1000
             }
             
             req = urllib.request.Request('https://api.deepseek.com/chat/completions',
@@ -712,7 +712,7 @@ def query():
     if not question:
         return jsonify({'error': 'Question is required'}), 400
     try:
-        search_results = vector_store.search(question, top_k=5)
+        search_results = vector_store.search(question, top_k=10)
         result = generate_answer(question, search_results)
         return jsonify({
             'status': 'success',
