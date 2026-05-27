@@ -67,7 +67,7 @@ class VectorStore:
             return 0.0
         return dot / (mag1 * mag2)
     
-    def search(self, query, top_k=10):
+    def search(self, query, top_k=15):
         if not self.chunks:
             return []
         query_vec = self._get_tfidf_vector(query)
@@ -124,7 +124,13 @@ def generate_answer(question, search_results):
 Documents:
 {context}
 
-Answer directly. For analytical questions, show all relevant deal details and patterns. No formatting or boilerplate."""
+RESPOND WITH:
+1. Query type (Deal summary / Market analysis / Benchmarks / etc.)
+2. Structured data (tables, ranges, lists of deals)
+3. Key metrics ($/unit, $/PSF, %, IRR, CoC, etc. as relevant)
+4. Source deals/markets referenced
+
+Format with clear labels and values. Show ranges for benchmarks. Include all deals found."""
             payload = {
                 "model": "deepseek-chat",
                 "messages": [
@@ -719,7 +725,7 @@ def query():
     if not question:
         return jsonify({'error': 'Question is required'}), 400
     try:
-        search_results = vector_store.search(question, top_k=10)
+        search_results = vector_store.search(question, top_k=15)
         result = generate_answer(question, search_results)
         return jsonify({
             'status': 'success',
