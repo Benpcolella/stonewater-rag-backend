@@ -2,6 +2,13 @@ import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
+
+# Initialize vector store from embedded data if needed
+try:
+    import vector_store_init
+except ImportError:
+    pass
+
 from document_sync import DocumentSync
 from pdf_processor import PDFProcessor
 from vector_store import VectorStore
