@@ -1,20 +1,41 @@
 import os
+import base64
+import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-# Initialize vector store from embedded data if needed
-try:
-    import vector_store_init
-except ImportError:
-    pass
+load_dotenv()
+
+# Initialize vector store files from embedded data before importing VectorStore
+def initialize_vector_store_files():
+    """Extract embedded vector store data and write to disk if files don't exist."""
+    if os.path.exists('vector_store.json') and os.path.getsize('vector_store.json') > 100:
+        return  # Files already exist and have content
+
+    try:
+        # Import the vector store init data
+        from vector_store_init import vector_store_b64, metadata_b64
+
+        # Write vector store
+        with open('vector_store.json', 'wb') as f:
+            f.write(base64.b64decode(vector_store_b64))
+
+        # Write metadata
+        with open('local_metadata.json', 'wb') as f:
+            f.write(base64.b64decode(metadata_b64))
+
+        print("✓ Vector store initialized from embedded data")
+    except Exception as e:
+        print(f"⚠ Could not initialize from vector_store_init: {e}")
+
+# Initialize before creating VectorStore instance
+initialize_vector_store_files()
 
 from document_sync import DocumentSync
 from pdf_processor import PDFProcessor
 from vector_store import VectorStore
 from llm_query_engine import LLMQueryEngine
-
-load_dotenv()
 
 app = Flask(__name__)
 CORS(app, origins=[os.getenv('FRONTEND_URL', 'http://localhost:3000')])
