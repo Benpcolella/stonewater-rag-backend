@@ -101,29 +101,27 @@ class VectorStore:
 vector_store = VectorStore()
 
 def cleanup_response(text):
-    """Remove all junk from LLM response."""
-    # Remove asterisks
-    text = text.replace('**', '').replace('*', '')
-    # Remove emails
+    """Strip junk, keep only the answer."""
     import re
+    text = text.replace('**', '').replace('*', '').replace('__', '')
+    text = re.sub(r'\|[-\s]+\|', '|', text)
+    text = re.sub(r'-{3,}', '', text)
     text = re.sub(r'[a-z0-9._%+-]+@[a-z0-9.-]+', '', text, flags=re.I)
-    # Remove phone numbers
     text = re.sub(r'\d{3}[-.]?\d{3}[-.]?\d{4}', '', text)
-    # Remove boilerplate
-    text = re.sub(r'Based (solely )?on.*?documents', '', text, flags=re.I)
-    # Remove section headers
-    text = re.sub(r'\*{1,2}[A-Z][a-zA-Z ]*:\*{0,2}', '', text)
-    # Collapse spaces
+    text = re.sub(r'Based on.*?documents', '', text, flags=re.I)
+    text = re.sub(r'Source.*?:', '', text, flags=re.I)
+    text = re.sub(r'[*]{1,2}[A-Z][a-zA-Z ]*:', '', text)
+    clean_lines = []
+    for l in text.split('\n'):
+        l = l.strip()
+        if l and len(l) > 3 and not all(c in '|-_' for c in l):
+            clean_lines.append(l)
+    text = '\n'.join(clean_lines)
     text = re.sub(r'  +', ' ', text)
-    text = re.sub(r'\n+', ' ', text)
-    # Limit length
     text = text.strip()
-    if len(text) > 1200:
-        text = text[:1200]
-        idx = text.rfind('.')
-        if idx > 300:
-            text = text[:idx+1]
-    return text.strip()
+    if len(text) > 800:
+        text = text[:800].rsplit(' ', 1)[0]
+    return text
 
 def generate_answer(question, search_results):
     if not search_results:
