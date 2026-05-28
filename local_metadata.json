@@ -1,0 +1,37 @@
+{
+  "Stonewater Group Internal Overview Q2 2026.docx.pdf": {
+    "file_name": "Stonewater Group Internal Overview Q2 2026.docx.pdf",
+    "file_path": "Stonewater Group Internal Overview Q2 2026.docx.pdf",
+    "doc_type": null,
+    "client_project": null,
+    "hash": "3be5a3b5b79ad99fe69f11f853206809bf45dc19e87e2501894b24214862d3dc"
+  },
+  "market_studies/26.009.0 LV Collective - NMS (USA,USA) 5.22.26.pdf": {
+    "file_name": "26.009.0 LV Collective - NMS (USA,USA) 5.22.26.pdf",
+    "file_path": "market_studies/26.009.0 LV Collective - NMS (USA,USA) 5.22.26.pdf",
+    "doc_type": "Market Study",
+    "client_project": null,
+    "hash": "eb436d23aba0054377cc2e8299d14d49a16dfef4bfe951ae8eb7770967876797"
+  },
+  "market_studies/Site Specific Market Study Example #1.pdf": {
+    "file_name": "Site Specific Market Study Example #1.pdf",
+    "file_path": "market_studies/Site Specific Market Study Example #1.pdf",
+    "doc_type": "Market Study",
+    "client_project": null,
+    "hash": "065fe95979d69581528120242997d925fbf55a530f8e1bc7f4b652b92f2939d1"
+  },
+  "client_projects/Paragon Capital MRW Entrada Loan Summary 4-16-26.pdf": {
+    "file_name": "Paragon Capital MRW Entrada Loan Summary 4-16-26.pdf",
+    "file_path": "client_projects/Paragon Capital MRW Entrada Loan Summary 4-16-26.pdf",
+    "doc_type": "Client Project",
+    "client_project": "Paragon Capital MRW Entrada Loan Summary 4-16-26.pdf",
+    "hash": "a5ebba6d4293002777ed7c86e8fdf8673cd0ca86d61caa48b2b613f0270c0b0a"
+  },
+  "client_projects/Marketplace at Altamonte BOE 9 APR 26.pdf": {
+    "file_name": "Marketplace at Altamonte BOE 9 APR 26.pdf",
+    "file_path": "client_projects/Marketplace at Altamonte BOE 9 APR 26.pdf",
+    "doc_type": "Client Project",
+    "client_project": "Marketplace at Altamonte BOE 9 APR 26.pdf",
+    "hash": "b13aeb88679270d7a17e64dd6fb022dbfa001804a6821332587f837b0894e640"
+  }
+}

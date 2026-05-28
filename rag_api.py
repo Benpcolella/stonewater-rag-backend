@@ -3,12 +3,14 @@ import json
 import base64
 import math
 import sys
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
 from collections import defaultdict
 import re
 import urllib.request
+from deal_queries import DealQueryEngine, resolve_metric_alias
+from response_formatter import format_response
 
 load_dotenv()
 
@@ -325,8 +327,209 @@ def validate_api_key():
     return token == os.getenv('API_KEY', 'stonewater_demo_key_123')
 
 # ============================================================================
+# DEALS DATABASE LOADING
+# ============================================================================
+
+def load_deals_database():
+    """Load comprehensive deals database from JSON."""
+    try:
+        deals_file = os.path.join(os.path.dirname(__file__), 'deals_database_comprehensive.json')
+        if os.path.exists(deals_file):
+            with open(deals_file, 'r') as f:
+                return json.load(f)
+        else:
+            print(f"WARNING: Deals database not found at {deals_file}")
+            return {}
+    except Exception as e:
+        print(f"ERROR loading deals database: {str(e)}")
+        return {}
+
+def extract_deal_name(question):
+    """Extract deal name from query using fuzzy matching."""
+    # Convert to lowercase for comparison
+    q_lower = question.lower()
+    
+    # Direct exact match (case-insensitive)
+    for deal_name in deals_db.keys():
+        if deal_name.lower() in q_lower:
+            return deal_name
+    
+    # Substring match - find deal names mentioned in question
+    words = set(re.findall(r'\b[A-Za-z]+\b', q_lower))
+    
+    for deal_name in deals_db.keys():
+        deal_words = set(deal_name.lower().split())
+        # If most words from deal name appear in question, it's a match
+        if len(deal_words & words) >= max(1, len(deal_words) - 1):
+            return deal_name
+    
+    return None
+
+def format_deal_response(deal_name, deal_data, question_context=None):
+    """Format structured deal data as readable response."""
+    response = f"**{deal_name}**\n\n"
+    
+    # Property Information
+    prop_info = deal_data.get('property_information', {})
+    if prop_info:
+        response += "**PROPERTY INFORMATION:**\n"
+        response += f"- Location: {prop_info.get('address', 'N/A')}, {prop_info.get('city', '')}, {prop_info.get('state', '')} {prop_info.get('zip', '')}\n"
+        response += f"- Total Units: {prop_info.get('total_units', 'N/A')}\n"
+        response += f"- Rentable SF: {prop_info.get('rentable_sf', 'N/A'):,} SF\n"
+        response += f"- Underwriting Date: {prop_info.get('underwriting_date', 'N/A')}\n"
+        response += f"- Market: {prop_info.get('market', 'N/A')}\n\n"
+    
+    # Financial Summary
+    fin_summary = deal_data.get('financial_summary', {})
+    if fin_summary and fin_summary.get('total_cost'):
+        response += "**FINANCIAL SUMMARY (CAPITAL STACK):**\n"
+        response += f"- Total Project Cost: {fin_summary['total_cost'].get('total', 'N/A')} ({fin_summary['total_cost'].get('per_unit', 'N/A')}/unit)\n"
+        response += f"  - Hard Costs: {fin_summary.get('hard_costs', {}).get('total', 'N/A')} ({fin_summary.get('hard_costs', {}).get('percent', 'N/A')})\n"
+        response += f"  - Soft Costs: {fin_summary.get('soft_costs', {}).get('total', 'N/A')} ({fin_summary.get('soft_costs', {}).get('percent', 'N/A')})\n"
+        response += f"  - Land Costs: {fin_summary.get('land_costs', {}).get('total', 'N/A')} ({fin_summary.get('land_costs', {}).get('percent', 'N/A')})\n\n"
+    
+    # Construction Financing
+    const_fin = deal_data.get('construction_financing', {})
+    if const_fin:
+        response += "**CONSTRUCTION FINANCING:**\n"
+        response += f"- Loan Amount: {const_fin.get('loan_amount', 'N/A')} ({const_fin.get('ltc_percent', 'N/A')} LTC)\n"
+        response += f"- Term: {const_fin.get('loan_term_years', 'N/A')} years ({const_fin.get('loan_term_months', 'N/A')} months)\n"
+        response += f"- Interest Rate: {const_fin.get('interest_rate_percent', 'N/A')}\n"
+        response += f"- Amortization: {const_fin.get('amortization_years', 'N/A')} years\n"
+        response += f"- Interest Only Period: {const_fin.get('interest_only_months', 'N/A')} months\n"
+        response += f"- DSCR (I/O): {const_fin.get('io_dscr', 'N/A')}, (P&I): {const_fin.get('pi_dscr', 'N/A')}\n\n"
+    
+    # Permanent Financing
+    perm_fin = deal_data.get('permanent_financing', {})
+    if perm_fin and perm_fin.get('loan_amount'):
+        response += "**PERMANENT FINANCING:**\n"
+        response += f"- Loan Amount: {perm_fin.get('loan_amount', 'N/A')} ({perm_fin.get('ltv_percent', 'N/A')} LTV)\n"
+        response += f"- Term: {perm_fin.get('loan_term_years', 'N/A')} years\n"
+        response += f"- Interest Rate: {perm_fin.get('interest_rate_percent', 'N/A')}\n"
+        response += f"- DSCR Requirement: {perm_fin.get('dscr_requirement', 'N/A')}\n\n"
+    
+    # Equity Breakdown
+    equity = deal_data.get('equity_breakdown', {})
+    if equity:
+        response += "**EQUITY BREAKDOWN:**\n"
+        response += f"- Sponsor: {equity.get('sponsor', {}).get('percent', 'N/A')} ({equity.get('sponsor', {}).get('amount', 'N/A')})\n"
+        response += f"- Common Equity LPs: {equity.get('common_equity_lps', {}).get('percent', 'N/A')} ({equity.get('common_equity_lps', {}).get('amount', 'N/A')})\n"
+        response += f"- Preferred Equity LPs: {equity.get('preferred_equity_lps', {}).get('percent', 'N/A')} ({equity.get('preferred_equity_lps', {}).get('amount', 'N/A')})\n\n"
+    
+    # Operating Assumptions
+    op_assume = deal_data.get('operating_assumptions', {})
+    if op_assume:
+        response += "**OPERATING ASSUMPTIONS:**\n"
+        response += f"- Vacancy Rate: {op_assume.get('general_vacancy_percent', 'N/A')}\n"
+        response += f"- Operating Expense Ratio: {op_assume.get('operating_expense_ratio_percent', 'N/A')}\n"
+        response += f"- Break-Even Occupancy: {op_assume.get('break_even_occupancy_percent', 'N/A')}\n"
+        response += f"- Rent Growth: {op_assume.get('rent_growth_assumptions', {}).get('year_1_percent', 'N/A')} annually\n\n"
+    
+    # Project Returns
+    returns = deal_data.get('project_returns', {})
+    if returns:
+        response += "**PROJECT RETURNS:**\n"
+        response += f"- Levered IRR: {returns.get('levered_irr_percent', 'N/A')}\n"
+        response += f"- Levered Equity Multiple: {returns.get('levered_equity_multiple', 'N/A')}\n"
+        response += f"- Unlevered IRR: {returns.get('unlevered_irr_percent', 'N/A')}\n"
+        response += f"- Cash-on-Cash Return: {returns.get('cash_on_cash_return', 'N/A')}\n\n"
+    
+    # Unit Mix
+    unit_mix = deal_data.get('unit_mix', [])
+    if unit_mix:
+        response += "**UNIT MIX:**\n"
+        for unit in unit_mix:
+            response += f"- {unit.get('unit_type', 'Unknown')}: {unit.get('total_units', 'N/A')} units ({unit.get('percent_of_total', 'N/A')}), ${unit.get('avg_rent_monthly', 'N/A')}/mo avg\n"
+        response += "\n"
+    
+    # Source
+    source_file = deal_data.get('source_file', 'Unknown')
+    response += f"**Source**: {source_file}\n"
+    
+    return response
+
+def route_query(question):
+    """Route query to deals DB or RAG based on content."""
+    deal_name = extract_deal_name(question)
+    
+    if deal_name:
+        # Deal-specific question
+        deal_data = deals_db[deal_name]
+        response = format_deal_response(deal_name, deal_data, question)
+        return {
+            'route': 'deals_db',
+            'deal': deal_name,
+            'answer': response,
+            'citations': [],
+            'error': None
+        }
+    else:
+        # Market/general question - use RAG
+        search_results = vector_store.search(question, top_k=15)
+        result = generate_answer(question, search_results)
+        result['route'] = 'rag'
+        return result
+
+# ============================================================================
 # API ROUTES
 # ============================================================================
+
+
+
+@app.route('/api/deal/<deal_name>', methods=['GET'])
+def get_deal(deal_name):
+    """Get specific deal data from deals database."""
+    if not validate_api_key():
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    if deal_name not in deals_db:
+        return jsonify({
+            'error': f'Deal "{deal_name}" not found',
+            'available_deals': list(deals_db.keys())
+        }), 404
+    
+    deal_data = deals_db[deal_name]
+    response = format_deal_response(deal_name, deal_data)
+    
+    return jsonify({
+        'status': 'success',
+        'deal': deal_name,
+        'answer': response,
+        'data': deal_data
+    })
+
+@app.route('/api/deals', methods=['GET'])
+def list_deals():
+    """List all available deals with key metrics."""
+    if not validate_api_key():
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    deals_summary = []
+    for deal_name, deal_data in deals_db.items():
+        prop = deal_data.get('property_information', {})
+        fin = deal_data.get('construction_financing', {})
+        
+        deals_summary.append({
+            'name': deal_name,
+            'market': prop.get('market'),
+            'city': prop.get('city'),
+            'units': prop.get('total_units'),
+            'underwriting_date': prop.get('underwriting_date'),
+            'loan_amount': fin.get('loan_amount'),
+            'ltc_percent': fin.get('ltc_percent')
+        })
+    
+    # Sort by underwriting date (most recent first)
+    deals_summary.sort(
+        key=lambda x: x.get('underwriting_date', ''),
+        reverse=True
+    )
+    
+    return jsonify({
+        'status': 'success',
+        'count': len(deals_summary),
+        'deals': deals_summary
+    })
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -345,14 +548,15 @@ def query():
     if not question:
         return jsonify({'error': 'Question is required'}), 400
     try:
-        search_results = vector_store.search(question, top_k=15)
-        result = generate_answer(question, search_results)
+        result = route_query(question)
         return jsonify({
             'status': 'success',
             'question': question,
             'answer': result['answer'],
-            'citations': result['citations'],
-            'error': result['error']
+            'citations': result.get('citations', []),
+            'error': result.get('error'),
+            'route': result.get('route', 'unknown'),
+            'deal': result.get('deal')
         })
     except Exception as e:
         return jsonify({'error': str(e), 'status': 'error'}), 500
@@ -927,6 +1131,219 @@ function logout() {
 </html>
 """
 
+# ============================================================================
+# RESPONSE FORMATTER HELPER
+# ============================================================================
+
+def format_response_if_requested(data: dict, response_type: str = 'auto') -> any:
+    """
+    Check if ?format=text is requested, otherwise return JSON
+    """
+    fmt = request.args.get('format', 'json').lower()
+
+    if fmt == 'text':
+        formatted_text = format_response(data, response_type)
+        response = make_response(formatted_text)
+        response.headers['Content-Type'] = 'text/plain; charset=utf-8'
+        return response
+    else:
+        return jsonify(data)
+
+
+# ============================================================================
+# STRUCTURED QUERY ENDPOINTS (New)
+# ============================================================================
+
+@app.route('/api/query/by-state', methods=['GET'])
+def query_by_state():
+    """Query metrics by state with optional metric filter"""
+    if not validate_api_key():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    state = request.args.get('state', '').upper()
+    metric = request.args.get('metric', '')
+
+    if not state:
+        return jsonify({'error': 'state parameter required'}), 400
+    if not metric:
+        return jsonify({'error': 'metric parameter required'}), 400
+
+    # Resolve metric alias
+    metric = resolve_metric_alias(metric)
+
+    result = query_engine.query_metric(metric, state=state)
+    response_data = {
+        'status': 'success',
+        'query': f'{state} {metric}',
+        'data': result
+    }
+
+    return format_response_if_requested(response_data, response_type='by_state')
+
+
+@app.route('/api/query/by-city', methods=['GET'])
+def query_by_city():
+    """Query metrics by city with optional state filter"""
+    if not validate_api_key():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    city = request.args.get('city', '')
+    state = request.args.get('state', '')
+    metric = request.args.get('metric', '')
+
+    if not city:
+        return jsonify({'error': 'city parameter required'}), 400
+    if not metric:
+        return jsonify({'error': 'metric parameter required'}), 400
+
+    # Resolve metric alias
+    metric = resolve_metric_alias(metric)
+
+    result = query_engine.query_metric(metric, state=state or None, city=city)
+    response_data = {
+        'status': 'success',
+        'query': f'{city}, {state or "All"} - {metric}',
+        'data': result
+    }
+
+    return format_response_if_requested(response_data, response_type='by_city')
+
+
+@app.route('/api/search', methods=['GET'])
+def search_deals():
+    """Fuzzy search for deals by name or location"""
+    if not validate_api_key():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({'error': 'q (query) parameter required'}), 400
+
+    # Fuzzy search
+    deal_name = query_engine.fuzzy_search_deal(q)
+
+    if not deal_name:
+        response_data = {
+            'status': 'no_match',
+            'query': q,
+            'message': f'No deals found matching "{q}"'
+        }
+        return format_response_if_requested(response_data, response_type='search')
+
+    # Get deal summary
+    summary = query_engine.get_deal_summary(deal_name)
+
+    response_data = {
+        'status': 'success',
+        'query': q,
+        'matched_deal': deal_name,
+        'data': summary
+    }
+
+    return format_response_if_requested(response_data, response_type='search')
+
+
+@app.route('/api/compare', methods=['GET'])
+def compare_deals():
+    """Compare metrics across deals"""
+    if not validate_api_key():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    # Get parameters
+    state = request.args.get('state', '')
+    cities = request.args.getlist('cities')  # ?cities=Dallas&cities=Orlando
+    metrics_str = request.args.get('metrics', '')  # ?metrics=ltc,irr,cap_rate
+
+    if not metrics_str:
+        return jsonify({'error': 'metrics parameter required (comma-separated)'}), 400
+
+    # Parse metrics
+    metrics = [resolve_metric_alias(m.strip()) for m in metrics_str.split(',')]
+
+    # Get deals to compare
+    if state:
+        state = state.upper()
+        deal_names = query_engine.get_deals_by_state(state)
+        location_filter = f'{state} state'
+    elif cities:
+        deal_names = []
+        for city in cities:
+            deal_names.extend(query_engine.get_deals_by_city(city))
+        deal_names = list(set(deal_names))  # Remove duplicates
+        location_filter = ', '.join(cities)
+    else:
+        deal_names = None
+        location_filter = 'All'
+
+    result = query_engine.compare_metrics(metrics, deal_names=deal_names, state=state or None)
+
+    return jsonify({
+        'status': 'success',
+        'location': location_filter,
+        'metrics': metrics_str,
+        'data': result
+    })
+
+
+@app.route('/api/deal/<path:deal_name>/metrics', methods=['GET'])
+def get_deal_metrics(deal_name):
+    """Get specific metrics for a deal"""
+    if not validate_api_key():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    metrics_str = request.args.get('metrics', '')
+
+    # Search for deal with fuzzy matching
+    matched_name = query_engine.fuzzy_search_deal(deal_name) or deal_name
+
+    if matched_name not in query_engine.deals:
+        return jsonify({
+            'status': 'not_found',
+            'error': f'Deal "{deal_name}" not found'
+        }), 404
+
+    deal = query_engine.deals[matched_name]
+
+    if not metrics_str:
+        # Return all available metrics
+        summary = query_engine.get_deal_summary(matched_name)
+        return jsonify({
+            'status': 'success',
+            'deal': matched_name,
+            'data': summary
+        })
+
+    # Return specific metrics
+    metrics = [resolve_metric_alias(m.strip()) for m in metrics_str.split(',')]
+    result = {'deal': matched_name}
+
+    for metric in metrics:
+        value = query_engine.extract_metric(deal, metric)
+        result[metric] = query_engine.format_metric(value)
+
+    return jsonify({
+        'status': 'success',
+        'deal': matched_name,
+        'metrics_requested': metrics_str,
+        'data': result
+    })
+
+
+@app.route('/api/metrics/available', methods=['GET'])
+def get_available_metrics():
+    """Get list of available metrics and their aliases"""
+    if not validate_api_key():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    from deal_queries import METRIC_ALIASES
+
+    return jsonify({
+        'status': 'success',
+        'aliases': METRIC_ALIASES,
+        'metrics': query_engine.get_metrics_available()
+    })
+
+
 @app.route('/')
 @app.route('/index.html')
 def serve_frontend():
@@ -935,6 +1352,17 @@ def serve_frontend():
 # ============================================================================
 # RUN APP
 # ============================================================================
+# ============================================================================
+# LOAD DEALS DATABASE AT STARTUP
+# ============================================================================
+deals_db = load_deals_database()
+print(f"Loaded {len(deals_db)} deals from comprehensive database")
+
+# Initialize structured query engine
+query_engine = DealQueryEngine('deals_database_comprehensive.json')
+print(f"Query engine ready: {len(query_engine.states)} states, {len(query_engine.cities)} cities")
+
+
 if __name__ == '__main__':
     port = int(os.getenv('FLASK_PORT', 5001))
     app.run(debug=True, port=port)
