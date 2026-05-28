@@ -39,6 +39,13 @@ TEST 4: Deal Summary
 ✅ Retrieves complete deal information with all fields
 ```
 
+### Dependency Issue - RESOLVED
+- ❌ Initial issue: `python-Levenshtein` requires CMake/C++ compilation (not available on PythonAnywhere)
+- ✅ Solution: Removed `python-Levenshtein` from requirements.txt
+- ✅ Result: `fuzzywuzzy` works perfectly with pure Python fallback
+- ✅ Impact: Fuzzy search is still fully functional, just uses Python implementation instead of optimized C++ version
+- ✅ Performance: No noticeable difference for typical use cases (small to medium deal databases)
+
 ---
 
 ## 🚀 Next Step: PythonAnywhere Deployment

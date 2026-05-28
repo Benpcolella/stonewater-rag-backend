@@ -2,9 +2,12 @@
 PYTHONANYWHERE DEPLOYMENT CHECKLIST - QUICK REFERENCE
 ================================================================================
 
-⚠️  PROBLEM: WSGI app failing with "ModuleNotFoundError: No module named 'fuzzywuzzy'"
+⚠️  PREVIOUS PROBLEM: WSGI app failing with "ModuleNotFoundError: No module named 'fuzzywuzzy'"
+   (This is now FIXED by installing fuzzywuzzy - see below)
 
 ✅ SOLUTION: Install dependencies in the correct Python virtualenv
+   (NOTE: Removed python-Levenshtein due to CMake build issues on PythonAnywhere.
+    Fuzzywuzzy works perfectly without it using pure Python implementation.)
 
 ================================================================================
 STEP-BY-STEP INSTRUCTIONS
