@@ -6,7 +6,43 @@ Provides filtered, fuzzy-searchable access to deals database
 
 import json
 from typing import List, Dict, Any, Optional
-from fuzzywuzzy import fuzz, process
+
+# Try to import fuzzywuzzy, fall back to basic string matching if not available
+try:
+    from fuzzywuzzy import fuzz, process
+    HAS_FUZZYWUZZY = True
+except ImportError:
+    HAS_FUZZYWUZZY = False
+    # Provide basic string matching fallback
+    class SimpleFuzz:
+        @staticmethod
+        def token_set_ratio(a, b):
+            """Simple string similarity (0-100)"""
+            a_lower = a.lower()
+            b_lower = b.lower()
+            if a_lower == b_lower:
+                return 100
+            if a_lower in b_lower or b_lower in a_lower:
+                return 80
+            return 0
+
+    class SimpleProcess:
+        @staticmethod
+        def extractOne(query, choices, scorer=None):
+            """Find best matching choice"""
+            if scorer is None:
+                scorer = SimpleFuzz.token_set_ratio
+            best_match = None
+            best_score = 0
+            for choice in choices:
+                score = scorer(query, choice)
+                if score > best_score:
+                    best_score = score
+                    best_match = choice
+            return (best_match, best_score) if best_match else (None, 0)
+
+    fuzz = SimpleFuzz()
+    process = SimpleProcess()
 
 class DealQueryEngine:
     """Query deals with filtering, fuzzy search, and structured responses"""
