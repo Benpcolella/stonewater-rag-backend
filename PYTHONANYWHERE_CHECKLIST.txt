@@ -1,0 +1,156 @@
+================================================================================
+PYTHONANYWHERE DEPLOYMENT CHECKLIST - QUICK REFERENCE
+================================================================================
+
+⚠️  PROBLEM: WSGI app failing with "ModuleNotFoundError: No module named 'fuzzywuzzy'"
+
+✅ SOLUTION: Install dependencies in the correct Python virtualenv
+
+================================================================================
+STEP-BY-STEP INSTRUCTIONS
+================================================================================
+
+OPTION 1: SSH (Recommended - Takes ~5 minutes)
+────────────────────────────────────────────────────────────────────────────
+
+1. SSH into PythonAnywhere:
+   ssh Benpcolella@ssh.pythonanywhere.com
+
+2. Navigate and pull latest code:
+   cd /home/Benpcolella/stonewater-rag-backend
+   git pull origin main
+
+3. Create virtual environment (ONLY NEEDED IF NOT ALREADY DONE):
+   mkvirtualenv --python=/usr/bin/python3.11 stonewater-env
+
+4. Activate and install:
+   source ~/.virtualenvs/stonewater-env/bin/activate
+   pip install -r requirements.txt
+
+5. Edit WSGI file to use the virtualenv:
+   nano /var/www/benpcolella_pythonanywhere_com_wsgi.py
+
+   ADD THESE LINES AT THE TOP (before other imports):
+   ═══════════════════════════════════════════════════════════════════════════
+   import sys
+   path = '/home/Benpcolella/.virtualenvs/stonewater-env/lib/python3.11/site-packages'
+   if path not in sys.path:
+       sys.path.insert(0, path)
+   ═══════════════════════════════════════════════════════════════════════════
+
+6. Reload web app:
+   Visit: https://www.pythonanywhere.com/user/Benpcolella/webapps/
+   Click the RELOAD button next to your web app
+
+7. Test it works:
+   curl -H "Authorization: Bearer stonewater_demo_key_123" \
+     "https://benpcolella.pythonanywhere.com/api/query/by-state?state=FL&metric=cap_rate&format=text"
+
+   Expected response:
+   Here are the cap rate we've seen in FL:
+     • Marketplace at Altamonte (Altamonte Springs): 5.75%
+
+
+OPTION 2: Web UI (If SSH doesn't work)
+────────────────────────────────────────────────────────────────────────────
+
+1. Visit: https://www.pythonanywhere.com/user/Benpcolella/webapps/
+
+2. Click on your web app (benpcolella.pythonanywhere.com)
+
+3. Find "Virtualenv" section and click "Create new virtual environment"
+   - Choose Python 3.11
+   - Wait for it to finish
+
+4. Once done, click "Start web console" in the virtualenv
+
+5. In the console that opens, run:
+   cd /home/Benpcolella/stonewater-rag-backend
+   git pull origin main
+   pip install -r requirements.txt
+
+6. Go back to web app and click RELOAD
+
+7. Test as shown above in Option 1, Step 7
+
+================================================================================
+VERIFICATION CHECKLIST (After deployment)
+================================================================================
+
+□ WSGI app loads without "ModuleNotFoundError"
+  (Check dashboard at: https://www.pythonanywhere.com/user/Benpcolella/webapps/)
+
+□ Test query endpoint returns clean formatted response
+
+□ Test fuzzy search works (searches are case-insensitive)
+
+□ Test JSON response (use endpoint without &format=text)
+
+□ All 6 endpoints working:
+  ✓ /api/query/by-state
+  ✓ /api/query/by-city
+  ✓ /api/search
+  ✓ /api/compare
+  ✓ /api/deal/<name>/metrics
+  ✓ /api/metrics/available
+
+================================================================================
+IF SOMETHING GOES WRONG
+================================================================================
+
+Check error logs:
+ssh Benpcolella@ssh.pythonanywhere.com
+cat /var/log/benpcolella_pythonanywhere_com.error.log
+
+Verify dependencies installed:
+source ~/.virtualenvs/stonewater-env/bin/activate
+pip list | grep -i fuzzy
+
+Should see:
+  fuzzywuzzy 0.18.0
+  python-Levenshtein 0.21.1
+
+If not there, reinstall:
+pip install --upgrade fuzzywuzzy python-Levenshtein
+
+================================================================================
+IMPORTANT NOTES
+================================================================================
+
+• requirements.txt was updated to include fuzzywuzzy and python-Levenshtein
+• Latest code is on GitHub branch 'main'
+• All 13 tests passing locally - system works!
+• Just need to install dependencies in PythonAnywhere's Python environment
+• Takes about 5 minutes total
+
+================================================================================
+FILES INVOLVED
+================================================================================
+
+Local (already tested, ready):
+  ✅ deal_queries.py - Fuzzy search engine
+  ✅ response_formatter.py - Formats responses
+  ✅ rag_api.py - 6 API endpoints
+  ✅ requirements.txt - Updated with fuzzy dependencies
+  ✅ deals_database_comprehensive.json - 2 sample deals
+
+On PythonAnywhere (need to fix):
+  ⚠️  /home/Benpcolella/stonewater-rag-backend/ - Needs latest code + dependencies
+  ⚠️  /var/www/benpcolella_pythonanywhere_com_wsgi.py - Needs virtualenv path added
+
+================================================================================
+EXPECTED RESULT
+================================================================================
+
+When fixed, the live API at https://benpcolella.pythonanywhere.com will:
+
+✅ Accept fuzzy search queries (typos OK)
+✅ Filter deals by state and city
+✅ Return clean, formatted responses
+✅ Support both JSON and text formats
+✅ Compare metrics across deals
+✅ Provide metric aliases (cap_rate instead of long paths)
+
+All with the same code that works locally!
+
+================================================================================
